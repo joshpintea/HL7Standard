@@ -6,7 +6,10 @@ user = "postgres"
 database = "HL7STD"
 host = "127.0.0.1"
 port = "5432"
-password = "xxxxx"
+password = "xxxx"
+
+
+headers = {'Accept': 'application/json'}
 
 
 def psql_connect():
@@ -29,22 +32,6 @@ def psql_connect():
         raise Exception("Error while connecting to database", error)
 
     return connection
-
-
-# get a trigger event: https://hl7-definition.caristix.com/v2-api/1/HL7v2.3/TriggerEvents/ADT_A40
-
-# get all events: https://hl7-definition.caristix.com/v2-api/1/HL7v2.1/TriggerEvents
-
-# get all segments: https://hl7-definition.caristix.com/v2-api/1/HL7v2.2/Segments
-
-# segment type: https://hl7-definition.caristix.com/v2-api/1/HL7v2.2/Segments/ACC
-
-
-#
-# print(json.loads(r.content))
-
-
-headers = {'Accept': 'application/json'}
 
 
 def sanitize_string(s: str):
@@ -92,15 +79,20 @@ def insert_segments(segments, version, conn):
     conn.commit()
 
 
-def insert_seq(seg, curr, version, event_id):
+def insert_seq(seg, curr, version, event_id, parent_idx=''):
     if seg['isGroup']:
 
+        query = f"insert into hl7.event_segment (event_idx, version, segm_idx, usage, rpt, seq, parent_idx, is_group, name) values ('{event_id}', '{version}'," \
+                f" '{seg['id']}', '{seg['usage']}', '{seg['rpt']}','{seg['sequence']}', '{sanitize_string(parent_idx)}', 'true', '{sanitize_string(seg['name'])}')"
+
+        curr.execute(query)
+
         for sub_seg in seg['segments']:
-            insert_seq(sub_seg, curr, version, event_id)
+            insert_seq(sub_seg, curr, version, event_id, seg['name'])
 
     else:
-        query = f"insert into hl7.event_segment (event_idx, version, segm_idx, usage, rpt, seq) values ('{event_details['id']}', '{version}'," \
-                f" '{seg['id']}', '{seg['usage']}', '{seg['rpt']}','{seg['sequence']}')"
+        query = f"insert into hl7.event_segment (event_idx, version, segm_idx, usage, rpt, seq, parent_idx, name) values ('{event_id}', '{version}'," \
+                f" '{seg['id']}', '{seg['usage']}', '{seg['rpt']}','{seg['sequence']}', '{sanitize_string(parent_idx)}', '{sanitize_string(seg['name'])}')"
 
         curr.execute(query)
 
@@ -139,18 +131,12 @@ def get_all_events(version):
     url = f"https://hl7-definition.caristix.com/v2-api/1/HL7{version}/TriggerEvents"
     r = requests.get(url, headers=headers)
 
-    # if not r.status_code == 200:
-    #     raise Exception(f"Get all events for version {version} failed")
-
     return json.loads(r.content)
 
 
 def get_all_segments(version):
     url = f"https://hl7-definition.caristix.com/v2-api/1/HL7{version}/Segments"
     r = requests.get(url, headers=headers)
-
-    # if not r.status_code == 200:
-    #     raise Exception(f"Get all events for version {version} failed")
 
     return json.loads(r.content)
 
@@ -159,9 +145,6 @@ def get_event_details(version, event_idx):
     url = f"https://hl7-definition.caristix.com/v2-api/1/HL7{version}/TriggerEvents/{event_idx}"
     r = requests.get(url,
                      headers=headers)
-
-    # if not r.status_code == 200:
-    #     raise Exception(f"Get event details {event_idx} for version {version} failed")
 
     return json.loads(r.content)
 
